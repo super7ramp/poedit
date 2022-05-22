@@ -116,33 +116,15 @@ protected:
 class file_icons
 {
 public:
-    file_icons()
-    {
-#ifdef __WXGTK__
-        // wxSYS_SMALLICON_X is not implemented by wxGTK:
-        m_iconSize[icon_small] = PX(16);
-#else
-        m_iconSize[icon_small] = wxSystemSettings::GetMetric(wxSYS_SMALLICON_X);
-#endif
-        m_iconSize[icon_large] = wxSystemSettings::GetMetric(wxSYS_ICON_X);
-    }
+    file_icons() {}
 
-    wxBitmap get_small(const wxString& ext) { return do_get(ext, icon_small);  }
-    wxBitmap get_large(const wxString& ext) { return do_get(ext, icon_large); }
+    wxBitmapBundle get(const wxString& ext) { return do_get(ext);  }
 
 private:
-    enum icon_size
+    wxBitmapBundle do_get(const wxString& ext)
     {
-        icon_small = 0,
-        icon_large = 1,
-        icon_max
-    };
-
-    wxBitmap do_get(const wxString& ext, icon_size size)
-    {
-        auto& cache = m_cache[size];
-        auto i = cache.find(ext);
-        if (i != cache.end())
+        auto i = m_cache.find(ext);
+        if (i != m_cache.end())
             return i->second;
 
         std::unique_ptr<wxFileType> ft(wxTheMimeTypesManager->GetFileTypeFromExtension(ext));
@@ -150,17 +132,16 @@ private:
         {
             wxIconLocation icon;
             if (ft->GetIcon(&icon))
-                return cache.emplace(ext, create_bitmap(icon, size)).first->second;
+                return m_cache.emplace(ext, create_bitmap(icon)).first->second;
         }
 
-        cache.emplace(ext, wxNullBitmap);
+        m_cache.emplace(ext, wxNullBitmap);
         return wxNullBitmap;
     }
 
-    wxBitmap create_bitmap(const wxIconLocation& loc, icon_size size)
+    wxBitmapBundle create_bitmap(const wxIconLocation& loc)
     {
         wxString fullname = loc.GetFileName();
-        int desiredSize = m_iconSize[size];
 #ifdef __WXMSW__
         if (loc.GetIndex())
         {
@@ -168,24 +149,18 @@ private:
             fullname << ';' << loc.GetIndex();
         }
 #endif
-        wxIcon icon(fullname, wxBITMAP_TYPE_ICO, desiredSize, desiredSize);
-        if (!icon.IsOk())
-            icon.LoadFile(fullname, wxBITMAP_TYPE_ICO);
-#ifndef __WXMSW__
-        // There is no guarantee that the desired size given at icon construction
-        // has been taken into account - only wxMSW seems to use it
-        if (icon.GetWidth() != desiredSize || icon.GetHeight() != desiredSize)
+        wxBitmap mainIcon(fullname, wxBITMAP_TYPE_ICO);
+        wxVector<wxBitmap> bitmaps(1, mainIcon);
+        wxArrayString alternateIconLocs = loc.GetAlternateFileNames();
+        for (wxArrayString::const_iterator it = alternateIconLocs.begin(); it != alternateIconLocs.end(); it++)
         {
-            wxImage image = icon.ConvertToImage();
-            image.Rescale(desiredSize, desiredSize, wxIMAGE_QUALITY_HIGH);
-            return wxBitmap(image);
+            wxBitmap alternateIcon(*it, wxBITMAP_TYPE_ICO);
+            bitmaps.push_back(alternateIcon);
         }
-#endif
-        return icon;
+        return wxBitmapBundle::FromBitmaps(bitmaps);
     }
 
-    int m_iconSize[icon_max];
-    std::map<wxString, wxBitmap> m_cache[icon_max];
+    std::map<wxString, wxBitmapBundle> m_cache;
 };
 
 typedef std::shared_ptr<file_icons> file_icons_ptr;
@@ -423,7 +398,7 @@ protected:
 
             auto item = new wxMenuItem(menu, wxID_FILE1 + n, wxString::Format("&%d %s", n + 1, menuEntry));
             item->SetHelp(fn.GetFullPath());
-            item->SetBitmap(m_icons_cache->get_small(fn.GetExt()));
+            item->SetBitmap(m_icons_cache->get(fn.GetExt()));
             menu->Append(item);
         }
 
@@ -623,7 +598,7 @@ void RecentFilesCtrl::RefreshContent()
 #ifdef __WXOSX__
         wxBitmap icon([[NSWorkspace sharedWorkspace] iconForFileType:str::to_NS(f.GetExt())]);
 #else
-        wxBitmap icon(m_data->icons_cache->get_large(f.GetExt()));
+        wxBitmapBundle icon(m_data->icons_cache->get(f.GetExt()));
 #endif
         wxVector<wxVariant> data;
         data.push_back(wxVariant(icon));

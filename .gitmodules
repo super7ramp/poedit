@@ -4,8 +4,9 @@
 	ignore = untracked
 [submodule "deps/wx"]
 	path = deps/wx
-	url = https://github.com/vslavik/wxWidgets.git
+	url = https://github.com/super7ramp/wxWidgets.git
 	ignore = untracked
+	branch = wxIconLocation-add-alternate-icon-paths
 [submodule "deps/lucene/LucenePlusPlus"]
 	path = deps/lucene/LucenePlusPlus
 	url = https://github.com/vslavik/LucenePlusPlus.git
